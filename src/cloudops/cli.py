@@ -57,6 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
     report = commands.add_parser("report", help="Generate a local system report")
     report.add_argument("--output-dir", default="reports")
 
+    commands.add_parser("scan", help="Run local quality and test checks")
+    
     logs = commands.add_parser("logs", help="Read recent Docker container logs")
     logs.add_argument("container")
     logs.add_argument("--tail", type=int, default=50)
@@ -171,7 +173,22 @@ def main(argv: list[str] | None = None) -> int:
 
         print(f"Report created: {report_path}")
         return 0
+    elif args.command == "scan":
+        checks = [
+            ["ruff", "check", "src", "tests"],
+            ["pytest"],
+        ]
 
+        failed = False
+
+        for command in checks:
+            print(f"Running: {' '.join(command)}")
+            process = subprocess.run(command, check=False)
+
+            if process.returncode != 0:
+                failed = True
+
+        return 1 if failed else 0
     else:
         parser.error("Unknown command")
 
