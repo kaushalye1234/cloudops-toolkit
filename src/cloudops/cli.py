@@ -42,6 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
     backup = commands.add_parser("backup", help="Create a compressed backup of a directory")
     backup.add_argument("source")
     backup.add_argument("destination")
+    
+    services = commands.add_parser("services", help="Check Linux system services")
+    services.add_argument(
+        "names",
+        nargs="*",
+        default=["docker", "ssh"],
+        help="Service names to check",
+    )
 
     logs = commands.add_parser("logs", help="Read recent Docker container logs")
     logs.add_argument("container")
@@ -94,6 +102,17 @@ def main(argv: list[str] | None = None) -> int:
             check=False,
         )
         return process.returncode
+    elif args.command == "services":
+        for name in args.names:
+            process = subprocess.run(
+                ["systemctl", "is-active", name],
+                capture_output=True,
+                text=True,
+                check=False,
+        )
+            status = process.stdout.strip() or process.stderr.strip()
+            print(f"{name}: {status}")
+        return 0
 
     else:
         parser.error("Unknown command")
