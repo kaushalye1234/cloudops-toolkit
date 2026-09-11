@@ -104,6 +104,7 @@ Every push and pull request runs:
 - [x] Linux service status command
 - [x] Local system report command
 - [x] Automated tests and CI
+- [x] CLI tests for backup, services and reports
 - [ ] Structured application log analysis
 - [ ] Backup verification and retention policies
 - [ ] Deployment helpers
