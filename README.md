@@ -2,13 +2,13 @@
 
 [![CI](https://github.com/kaushalye1234/cloudops-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/kaushalye1234/cloudops-toolkit/actions/workflows/ci.yml)
 
-A learning-focused command-line toolkit for repeatable Linux health checks, network diagnostics, Docker inspection, service checks and backup automation.
+A learning-focused command-line toolkit for repeatable Linux health checks, network diagnostics, Docker inspection, service checks, backup automation and local system reporting.
 
 > **Project status:** early, usable milestone. Local Linux and Docker operations are implemented. AWS automation is planned and is not presented as completed.
 
 ## Why this project exists
 
-Cloud and DevOps engineers repeatedly inspect hosts, ports, disk capacity, services, containers, logs and backups. This project turns those tasks into small, testable commands with predictable output and useful exit codes for automation.
+Cloud and DevOps engineers repeatedly inspect hosts, ports, disk capacity, services, containers, logs, backups and system reports. This project turns those tasks into small, testable commands with predictable output and useful exit codes for automation.
 
 This repository is part of my DevOps and Cloud internship preparation. It focuses on practical Linux, Bash, Docker, Python CLI design, testing and CI/CD skills.
 
@@ -21,6 +21,7 @@ This repository is part of my DevOps and Cloud internship preparation. It focuse
 - Read recent Docker container logs
 - Create compressed directory backups
 - Check Linux service status with `systemctl`
+- Generate timestamped local system reports
 - Run automated tests and linting with GitHub Actions
 
 ## Current Commands
@@ -33,6 +34,7 @@ cloudops containers
 cloudops logs task-manager-backend --tail 20
 cloudops backup src backups
 cloudops services docker ssh
+cloudops report
 ```
 
 Use `--json` before supported check commands for machine-readable output:
@@ -40,6 +42,15 @@ Use `--json` before supported check commands for machine-readable output:
 ```bash
 cloudops --json disk --path /
 cloudops --json containers
+```
+
+## Reports
+
+The `report` command creates a timestamped text report in the `reports/` directory. Generated reports are ignored by Git so local machine output is not committed accidentally.
+
+```bash
+cloudops report
+ls reports
 ```
 
 ## Bash Automation
@@ -91,6 +102,7 @@ Every push and pull request runs:
 - [x] Safe local backup script
 - [x] Backup command in the Python CLI
 - [x] Linux service status command
+- [x] Local system report command
 - [x] Automated tests and CI
 - [ ] Structured application log analysis
 - [ ] Backup verification and retention policies
