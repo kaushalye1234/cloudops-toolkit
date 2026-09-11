@@ -1,0 +1,14 @@
+CloudOps System Report
+Generated at: 20260911T162336Z
+
+Health
+- OK: System health check completed
+
+Disk
+- OK: Disk usage for /: 0.67%
+
+Docker
+- OK: Docker is available; 10 running container(s)
+
+Services
+ssh: inactive
