@@ -7,7 +7,13 @@ import json
 import subprocess
 import sys
 
-from cloudops.checks import CheckResult, disk_check, docker_check, port_check, system_health
+from cloudops.checks import (
+    CheckResult,
+    disk_check,
+    docker_check,
+    port_check,
+    system_health,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
