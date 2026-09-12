@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/kaushalye1234/cloudops-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/kaushalye1234/cloudops-toolkit/actions/workflows/ci.yml)
 
-A learning-focused command-line toolkit for repeatable Linux health checks, network diagnostics, Docker inspection, service checks, backup automation and local system reporting.
+A learning-focused command-line toolkit for repeatable Linux health checks, network diagnostics, Docker inspection, service checks, backup automation, local system reporting and pre-push quality scans.
 
 > **Project status:** early, usable milestone. Local Linux and Docker operations are implemented. AWS automation is planned and is not presented as completed.
 
@@ -22,6 +22,7 @@ This repository is part of my DevOps and Cloud internship preparation. It focuse
 - Create compressed directory backups
 - Check Linux service status with `systemctl`
 - Generate timestamped local system reports
+- Run local quality scans before pushing code
 - Run automated tests and linting with GitHub Actions
 
 ## Current Commands
@@ -35,6 +36,7 @@ cloudops logs task-manager-backend --tail 20
 cloudops backup src backups
 cloudops services docker ssh
 cloudops report
+cloudops scan
 ```
 
 Use `--json` before supported check commands for machine-readable output:
@@ -43,6 +45,19 @@ Use `--json` before supported check commands for machine-readable output:
 cloudops --json disk --path /
 cloudops --json containers
 ```
+
+## Local Quality Scan
+
+The `scan` command runs the same basic checks you should run before pushing code.
+
+```bash
+cloudops scan
+```
+
+Currently it runs:
+
+- `ruff check src tests`
+- `pytest`
 
 ## Reports
 
@@ -103,6 +118,7 @@ Every push and pull request runs:
 - [x] Backup command in the Python CLI
 - [x] Linux service status command
 - [x] Local system report command
+- [x] Local quality scan command
 - [x] Automated tests and CI
 - [x] CLI tests for backup, services and reports
 - [ ] Structured application log analysis
