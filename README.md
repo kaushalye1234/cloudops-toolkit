@@ -23,7 +23,9 @@ This repository is part of my DevOps and Cloud internship preparation. It focuse
 - Check Linux service status with `systemctl`
 - Generate timestamped local system reports
 - Run local quality scans before pushing code
-- Run automated tests and linting with GitHub Actions
+- Check required local DevOps tools with a doctor command
+- Run automated tests, linting, shell checks and Docker smoke tests with GitHub Actions
+- Upload a generated system report as a GitHub Actions artifact
 
 ## Current Commands
 
@@ -37,6 +39,7 @@ cloudops backup src backups
 cloudops services docker ssh
 cloudops report
 cloudops scan
+cloudops doctor
 ```
 
 Use `--json` before supported check commands for machine-readable output:
@@ -59,6 +62,16 @@ Currently it runs:
 - `ruff check src tests`
 - `pytest`
 
+## Local Tool Check
+
+The `doctor` command checks whether common local DevOps tools are available in your environment.
+
+```bash
+cloudops doctor
+```
+
+It checks tools such as Python, Git, Docker, Ruff, Pytest and `systemctl`.
+
 ## Reports
 
 The `report` command creates a timestamped text report in the `reports/` directory. Generated reports are ignored by Git so local machine output is not committed accidentally.
@@ -67,6 +80,8 @@ The `report` command creates a timestamped text report in the `reports/` directo
 cloudops report
 ls reports
 ```
+
+GitHub Actions also generates a system report during CI and uploads it as an artifact. This demonstrates that the toolkit can create operational output automatically inside a CI/CD pipeline.
 
 ## Bash Automation
 
@@ -108,6 +123,7 @@ Every push and pull request runs:
 - Python linting with `ruff`
 - Bash analysis with `shellcheck`
 - A Docker image build and smoke test
+- System report generation and artifact upload
 
 ## Roadmap
 
@@ -119,8 +135,10 @@ Every push and pull request runs:
 - [x] Linux service status command
 - [x] Local system report command
 - [x] Local quality scan command
+- [x] Local environment doctor command
 - [x] Automated tests and CI
 - [x] CLI tests for backup, services and reports
+- [x] GitHub Actions system report artifact
 - [ ] Structured application log analysis
 - [ ] Backup verification and retention policies
 - [ ] Deployment helpers
