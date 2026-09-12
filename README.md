@@ -20,6 +20,7 @@ This repository is part of my DevOps and Cloud internship preparation. It focuse
 - Inspect running Docker containers
 - Read recent Docker container logs
 - Create compressed directory backups
+- Verify backup archives before trusting them
 - Check Linux service status with `systemctl`
 - Generate timestamped local system reports
 - Run local quality scans before pushing code
@@ -36,6 +37,7 @@ cloudops ports github.com 443
 cloudops containers
 cloudops logs task-manager-backend --tail 20
 cloudops backup src backups
+cloudops verify-backup backups/backup-file.tar.gz
 cloudops services docker ssh
 cloudops report
 cloudops scan
@@ -70,7 +72,7 @@ The `doctor` command checks whether common local DevOps tools are available in y
 cloudops doctor
 ```
 
-It checks tools such as Python, Git, Docker, Ruff, Pytest and `systemctl`.
+It checks tools such as Python, Git, Docker, Ruff, Pytest, `systemctl` and `tar`.
 
 ## Reports
 
@@ -82,6 +84,22 @@ ls reports
 ```
 
 GitHub Actions also generates a system report during CI and uploads it as an artifact. This demonstrates that the toolkit can create operational output automatically inside a CI/CD pipeline.
+
+## Backups
+
+The `backup` command creates a compressed `.tar.gz` archive of a directory.
+
+```bash
+cloudops backup src backups
+```
+
+The `verify-backup` command checks whether a backup archive is readable before you trust it.
+
+```bash
+cloudops verify-backup backups/backup-file.tar.gz
+```
+
+Backup verification matters because a backup is only useful if it can actually be opened and restored.
 
 ## Bash Automation
 
@@ -132,6 +150,7 @@ Every push and pull request runs:
 - [x] Docker container and log inspection
 - [x] Safe local backup script
 - [x] Backup command in the Python CLI
+- [x] Backup verification command
 - [x] Linux service status command
 - [x] Local system report command
 - [x] Local quality scan command
@@ -139,8 +158,8 @@ Every push and pull request runs:
 - [x] Automated tests and CI
 - [x] CLI tests for backup, services and reports
 - [x] GitHub Actions system report artifact
+- [ ] Backup retention policies
 - [ ] Structured application log analysis
-- [ ] Backup verification and retention policies
 - [ ] Deployment helpers
 - [ ] AWS inventory and health checks using `boto3`
 - [ ] Prometheus-compatible metrics output
