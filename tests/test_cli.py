@@ -67,6 +67,8 @@ def test_scan_command_runs_quality_checks(monkeypatch, capsys):
     assert code == 0
     assert commands == [["ruff", "check", "src", "tests"], ["pytest"]]
     assert "Running: ruff check src tests" in capsys.readouterr().out
+
+
 def test_verify_backup_command_accepts_valid_archive(tmp_path, capsys):
     source = tmp_path / "source"
     source.mkdir()
