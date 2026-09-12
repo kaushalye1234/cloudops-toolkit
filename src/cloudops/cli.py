@@ -46,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
     backup.add_argument("source")
     backup.add_argument("destination")
 
+    verify_backup = commands.add_parser(
+        "verify-backup",
+        help="Verify that a backup archive is readable",
+    )
+    verify_backup.add_argument("archive")
+
     services = commands.add_parser("services", help="Check Linux system services")
     services.add_argument(
         "names",
@@ -94,6 +100,36 @@ def check_services(names: list[str]) -> list[str]:
     return service_lines
 
 
+def verify_backup_archive(archive: str) -> int:
+    archive_path = Path(archive)
+
+    if not archive_path.exists():
+        print(f"[CRITICAL] Backup archive does not exist: {archive}")
+        return 1
+
+    if not archive_path.is_file():
+        print(f"[CRITICAL] Backup archive is not a file: {archive}")
+        return 1
+
+    process = subprocess.run(
+        ["tar", "-tzf", archive],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if process.returncode == 0:
+        print(f"[OK] Backup archive is readable: {archive}")
+        return 0
+
+    print(f"[CRITICAL] Backup archive is not readable: {archive}")
+
+    if process.stderr.strip():
+        print(process.stderr.strip())
+
+    return 1
+
+
 def run_scan() -> int:
     checks = [
         ["ruff", "check", "src", "tests"],
@@ -112,7 +148,7 @@ def run_scan() -> int:
 
 
 def run_doctor() -> int:
-    tools = ["python3", "git", "docker", "ruff", "pytest", "systemctl"]
+    tools = ["python3", "git", "docker", "ruff", "pytest", "systemctl", "tar"]
     failed = False
 
     for tool in tools:
@@ -191,6 +227,9 @@ def main(argv: list[str] | None = None) -> int:
             check=False,
         )
         return process.returncode
+
+    elif args.command == "verify-backup":
+        return verify_backup_archive(args.archive)
 
     elif args.command == "services":
         for line in check_services(args.names):
