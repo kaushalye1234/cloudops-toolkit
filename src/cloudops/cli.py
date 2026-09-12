@@ -6,6 +6,8 @@ import argparse
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
 from cloudops.checks import (
     CheckResult,
@@ -21,9 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="cloudops",
         description="Local Linux and container operations toolkit",
     )
-    parser.add_argument(
-        "--json", action="store_true", help="Print machine-readable JSON"
-    )
+    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     commands = parser.add_subparsers(dest="command", required=True)
 
     health = commands.add_parser("health", help="Check system health")
@@ -41,9 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("containers", help="Show running Docker containers")
 
-    backup = commands.add_parser(
-        "backup", help="Create a compressed backup of a directory"
-    )
+    backup = commands.add_parser("backup", help="Create a compressed backup of a directory")
     backup.add_argument("source")
     backup.add_argument("destination")
 
@@ -54,11 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=["docker", "ssh"],
         help="Service names to check",
     )
+
     report = commands.add_parser("report", help="Generate a local system report")
     report.add_argument("--output-dir", default="reports")
 
     commands.add_parser("scan", help="Run local quality and test checks")
-    
+
     logs = commands.add_parser("logs", help="Read recent Docker container logs")
     logs.add_argument("container")
     logs.add_argument("--tail", type=int, default=50)
@@ -74,9 +73,74 @@ def print_result(result: CheckResult, as_json: bool) -> None:
     print(f"[{result.status.upper()}] {result.message}")
 
     for key, value in result.details.items():
-        print(
-            f"  {key}: {json.dumps(value) if isinstance(value, (dict, list)) else value}"
+        print(f"  {key}: {json.dumps(value) if isinstance(value, (dict, list)) else value}")
+
+
+def check_services(names: list[str]) -> list[str]:
+    service_lines = []
+    for name in names:
+        process = subprocess.run(
+            ["systemctl", "is-active", name],
+            capture_output=True,
+            text=True,
+            check=False,
         )
+        status = process.stdout.strip() or process.stderr.strip()
+        service_lines.append(f"{name}: {status}")
+    return service_lines
+
+
+def run_scan() -> int:
+    checks = [
+        ["ruff", "check", "src", "tests"],
+        ["pytest"],
+    ]
+    failed = False
+
+    for command in checks:
+        print(f"Running: {' '.join(command)}")
+        process = subprocess.run(command, check=False)
+        if process.returncode != 0:
+            failed = True
+
+    return 1 if failed else 0
+
+
+def write_report(output_dir: str) -> Path:
+    report_dir = Path(output_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    report_path = report_dir / f"system-report-{timestamp}.txt"
+
+    health = system_health()
+    disk = disk_check()
+    docker = docker_check()
+    service_lines = check_services(["docker", "ssh"])
+
+    report_path.write_text(
+        "\n".join(
+            [
+                "CloudOps System Report",
+                f"Generated at: {timestamp}",
+                "",
+                "Health",
+                f"- {health.status.upper()}: {health.message}",
+                "",
+                "Disk",
+                f"- {disk.status.upper()}: {disk.message}",
+                "",
+                "Docker",
+                f"- {docker.status.upper()}: {docker.message}",
+                "",
+                "Services",
+                *service_lines,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return report_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -106,89 +170,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         return process.returncode
 
+    elif args.command == "services":
+        for line in check_services(args.names):
+            print(line)
+        return 0
+
+    elif args.command == "report":
+        report_path = write_report(args.output_dir)
+        print(f"Report created: {report_path}")
+        return 0
+
+    elif args.command == "scan":
+        return run_scan()
+
     elif args.command == "logs":
         process = subprocess.run(
             ["docker", "logs", "--tail", str(args.tail), args.container],
             check=False,
         )
         return process.returncode
-    elif args.command == "services":
-        for name in args.names:
-            process = subprocess.run(
-                ["systemctl", "is-active", name],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            status = process.stdout.strip() or process.stderr.strip()
-            print(f"{name}: {status}")
-        return 0
-    elif args.command == "report":
-        from datetime import UTC, datetime
-        from pathlib import Path
 
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        report_path = output_dir / f"system-report-{timestamp}.txt"
-
-        health = system_health()
-        disk = disk_check()
-        docker = docker_check()
-
-        service_lines = []
-        for name in ["docker", "ssh"]:
-            process = subprocess.run(
-                ["systemctl", "is-active", name],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        status = process.stdout.strip() or process.stderr.strip()
-        service_lines.append(f"{name}: {status}")
-
-        report_path.write_text(
-            "\n".join(
-                [
-                    "CloudOps System Report",
-                    f"Generated at: {timestamp}",
-                    "",
-                    "Health",
-                    f"- {health.status.upper()}: {health.message}",
-                    "",
-                    "Disk",
-                    f"- {disk.status.upper()}: {disk.message}",
-                    "",
-                    "Docker",
-                    f"- {docker.status.upper()}: {docker.message}",
-                    "",
-                    "Services",
-                    *service_lines,
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-
-        print(f"Report created: {report_path}")
-        return 0
-    elif args.command == "scan":
-        checks = [
-            ["ruff", "check", "src", "tests"],
-            ["pytest"],
-        ]
-
-        failed = False
-
-        for command in checks:
-            print(f"Running: {' '.join(command)}")
-            process = subprocess.run(command, check=False)
-
-            if process.returncode != 0:
-                failed = True
-
-        return 1 if failed else 0
     else:
         parser.error("Unknown command")
 
