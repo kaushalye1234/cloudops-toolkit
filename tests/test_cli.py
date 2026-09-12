@@ -13,7 +13,6 @@ def test_invalid_port_returns_usage_error(capsys):
     assert "Port must be" in capsys.readouterr().err
 
 
-
 def test_backup_command_creates_archive(tmp_path):
     source = tmp_path / "source"
     destination = tmp_path / "backups"
@@ -49,3 +48,22 @@ def test_services_command_returns_success():
     code = main(["services", "docker"])
 
     assert code == 0
+
+
+def test_scan_command_runs_quality_checks(monkeypatch, capsys):
+    commands = []
+
+    class CompletedProcess:
+        returncode = 0
+
+    def fake_run(command, check=False):
+        commands.append(command)
+        return CompletedProcess()
+
+    monkeypatch.setattr("cloudops.cli.subprocess.run", fake_run)
+
+    code = main(["scan"])
+
+    assert code == 0
+    assert commands == [["ruff", "check", "src", "tests"], ["pytest"]]
+    assert "Running: ruff check src tests" in capsys.readouterr().out
