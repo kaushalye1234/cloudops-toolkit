@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -57,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--output-dir", default="reports")
 
     commands.add_parser("scan", help="Run local quality and test checks")
+    commands.add_parser("doctor", help="Check local DevOps tool availability")
 
     logs = commands.add_parser("logs", help="Read recent Docker container logs")
     logs.add_argument("container")
@@ -78,6 +80,7 @@ def print_result(result: CheckResult, as_json: bool) -> None:
 
 def check_services(names: list[str]) -> list[str]:
     service_lines = []
+
     for name in names:
         process = subprocess.run(
             ["systemctl", "is-active", name],
@@ -87,6 +90,7 @@ def check_services(names: list[str]) -> list[str]:
         )
         status = process.stdout.strip() or process.stderr.strip()
         service_lines.append(f"{name}: {status}")
+
     return service_lines
 
 
@@ -100,7 +104,24 @@ def run_scan() -> int:
     for command in checks:
         print(f"Running: {' '.join(command)}")
         process = subprocess.run(command, check=False)
+
         if process.returncode != 0:
+            failed = True
+
+    return 1 if failed else 0
+
+
+def run_doctor() -> int:
+    tools = ["python3", "git", "docker", "ruff", "pytest", "systemctl"]
+    failed = False
+
+    for tool in tools:
+        path = shutil.which(tool)
+
+        if path:
+            print(f"[OK] {tool} found at {path}")
+        else:
+            print(f"[WARNING] {tool} not found")
             failed = True
 
     return 1 if failed else 0
@@ -140,6 +161,7 @@ def write_report(output_dir: str) -> Path:
         ),
         encoding="utf-8",
     )
+
     return report_path
 
 
@@ -182,6 +204,9 @@ def main(argv: list[str] | None = None) -> int:
 
     elif args.command == "scan":
         return run_scan()
+
+    elif args.command == "doctor":
+        return run_doctor()
 
     elif args.command == "logs":
         process = subprocess.run(
