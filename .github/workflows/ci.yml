@@ -21,6 +21,13 @@ jobs:
       - run: pip install -e . pytest ruff
       - run: ruff check src tests
       - run: pytest -q
+      - name: Generate system report
+        run: cloudops report --output-dir reports
+      - name: Upload system report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudops-system-report
+          path: reports/
 
   shellcheck:
     runs-on: ubuntu-latest
