@@ -10,6 +10,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from cloudops.backup import create_backup
 from cloudops.checks import (
     CheckResult,
     disk_check,
@@ -222,11 +223,13 @@ def main(argv: list[str] | None = None) -> int:
         result = docker_check()
 
     elif args.command == "backup":
-        process = subprocess.run(
-            ["bash", "scripts/backup.sh", args.source, args.destination],
-            check=False,
-        )
-        return process.returncode
+        try:
+            archive_path = create_backup(args.source, args.destination)
+        except (OSError, ValueError) as exc:
+            print(f"[CRITICAL] {exc}", file=sys.stderr)
+            return 1
+        print(f"Backup created: {archive_path}")
+        return 0
 
     elif args.command == "verify-backup":
         return verify_backup_archive(args.archive)
