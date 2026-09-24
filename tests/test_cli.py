@@ -1,3 +1,4 @@
+import json
 import sys
 import tarfile
 from unittest.mock import patch
@@ -118,6 +119,23 @@ def test_services_reports_missing_systemctl(monkeypatch, capsys):
 
     assert main(["services", "docker"]) == 1
     assert "systemctl is not installed" in capsys.readouterr().out
+
+
+def test_services_json_is_one_valid_document(monkeypatch, capsys):
+    class CompletedProcess:
+        returncode = 0
+        stdout = "active\n"
+        stderr = ""
+
+    monkeypatch.setattr("cloudops.cli.shutil.which", lambda _name: "/usr/bin/systemctl")
+    monkeypatch.setattr(
+        "cloudops.cli.subprocess.run",
+        lambda *_args, **_kwargs: CompletedProcess(),
+    )
+
+    assert main(["--json", "services", "docker", "ssh"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [item["details"]["service"] for item in payload] == ["docker", "ssh"]
 
 
 def test_doctor_detects_modules_in_running_environment(monkeypatch, capsys):

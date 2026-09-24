@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -274,8 +275,11 @@ def main(argv: list[str] | None = None) -> int:
 
     elif args.command == "services":
         results = check_services(args.names)
-        for result in results:
-            print_result(result, args.json)
+        if args.json:
+            print(json.dumps([asdict(result) for result in results], indent=2))
+        else:
+            for result in results:
+                print_result(result, False)
         return 0 if all(result.status == "ok" for result in results) else 1
 
     elif args.command == "report":
