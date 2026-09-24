@@ -18,9 +18,11 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: pip install -e . pytest ruff
+      - run: pip install -e ".[dev]"
       - run: ruff check src tests
       - run: pytest -q
+      - name: Verify installed commands outside the repository
+        run: bash scripts/verify-installed.sh
       - name: Generate system report
         run: cloudops report --output-dir reports
       - name: Upload system report artifact
@@ -40,5 +42,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
       - run: docker build -t cloudops-toolkit:test .
       - run: docker run --rm cloudops-toolkit:test disk --path / --warning 101
+      - name: Run disposable Docker operations demo
+        env:
+          CLOUDOPS_DEMO_IMAGE: cloudops-toolkit:test
+          CLOUDOPS_DEMO_SKIP_BUILD: "1"
+        run: bash scripts/docker-ops-demo.sh
