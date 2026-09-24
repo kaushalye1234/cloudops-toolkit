@@ -1,3 +1,5 @@
+import tarfile
+
 from cloudops.cli import main
 
 
@@ -24,6 +26,26 @@ def test_backup_command_creates_archive(tmp_path):
 
     assert code == 0
     assert list(destination.glob("backup-*.tar.gz"))
+
+
+def test_backup_works_outside_repository(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "hello.txt").write_text("hello", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["backup", "source", "backups"]) == 0
+    archive_path = next((tmp_path / "backups").glob("*.tar.gz"))
+    with tarfile.open(archive_path, "r:gz") as archive:
+        assert archive.extractfile("source/hello.txt").read() == b"hello"
+
+
+def test_backup_rejects_destination_inside_source(tmp_path, capsys):
+    source = tmp_path / "source"
+    source.mkdir()
+    assert main(["backup", str(source), str(source / "backups")]) == 1
+    assert "outside the source" in capsys.readouterr().err
+    assert not (source / "backups").exists()
 
 
 def test_report_command_creates_report(tmp_path):
