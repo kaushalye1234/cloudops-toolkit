@@ -1,6 +1,11 @@
+import sys
 import tarfile
+from unittest.mock import patch
 
-from cloudops.cli import main
+import pytest
+
+from cloudops.checks import CheckResult
+from cloudops.cli import main, write_report
 
 
 def test_disk_command_returns_success_for_valid_path(tmp_path, capsys):
@@ -67,28 +72,82 @@ def test_report_command_creates_report(tmp_path):
 
 
 def test_services_command_returns_success():
-    code = main(["services", "docker"])
+    class CompletedProcess:
+        returncode = 0
+        stdout = "active\n"
+        stderr = ""
+
+    with patch("cloudops.cli.shutil.which", return_value="/usr/bin/systemctl"), patch(
+        "cloudops.cli.subprocess.run", return_value=CompletedProcess()
+    ):
+        code = main(["services", "docker"])
 
     assert code == 0
 
 
-def test_scan_command_runs_quality_checks(monkeypatch, capsys):
+def test_scan_command_runs_quality_checks(tmp_path, monkeypatch, capsys):
     commands = []
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
 
     class CompletedProcess:
         returncode = 0
 
-    def fake_run(command, check=False):
-        commands.append(command)
+    def fake_run(command, cwd, check=False):
+        commands.append((command, cwd))
         return CompletedProcess()
 
     monkeypatch.setattr("cloudops.cli.subprocess.run", fake_run)
 
-    code = main(["scan"])
+    code = main(["scan", "--project", str(tmp_path)])
 
     assert code == 0
-    assert commands == [["ruff", "check", "src", "tests"], ["pytest"]]
-    assert "Running: ruff check src tests" in capsys.readouterr().out
+    assert commands == [
+        ([sys.executable, "-m", "ruff", "check", "src", "tests"], tmp_path),
+        ([sys.executable, "-m", "pytest"], tmp_path),
+    ]
+    assert "ruff check src tests" in capsys.readouterr().out
+
+
+def test_scan_rejects_directory_without_project(tmp_path, capsys):
+    assert main(["scan", "--project", str(tmp_path)]) == 1
+    assert "No pyproject.toml" in capsys.readouterr().err
+
+
+def test_services_reports_missing_systemctl(monkeypatch, capsys):
+    monkeypatch.setattr("cloudops.cli.shutil.which", lambda _name: None)
+
+    assert main(["services", "docker"]) == 1
+    assert "systemctl is not installed" in capsys.readouterr().out
+
+
+def test_doctor_detects_modules_in_running_environment(monkeypatch, capsys):
+    monkeypatch.setattr("cloudops.cli.importlib.util.find_spec", lambda _name: object())
+    monkeypatch.setattr("cloudops.cli.shutil.which", lambda name: f"/usr/bin/{name}")
+
+    assert main(["doctor"]) == 0
+    output = capsys.readouterr().out
+    assert "pytest Python module is installed" in output
+    assert "shellcheck found" in output
+
+
+def test_report_survives_missing_systemctl(tmp_path, monkeypatch):
+    monkeypatch.setattr("cloudops.cli.shutil.which", lambda _name: None)
+    monkeypatch.setattr(
+        "cloudops.cli.docker_check",
+        lambda: CheckResult("critical", "Docker CLI is not installed", {}),
+    )
+
+    report_path = write_report(str(tmp_path))
+
+    assert "systemctl is not installed" in report_path.read_text(encoding="utf-8")
+
+
+def test_negative_log_tail_is_rejected(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["logs", "demo", "--tail", "-1"])
+
+    assert exc_info.value.code == 2
+    assert "zero or greater" in capsys.readouterr().err
 
 
 def test_verify_backup_command_accepts_valid_archive(tmp_path, capsys):
@@ -114,3 +173,11 @@ def test_verify_backup_command_rejects_missing_archive(capsys):
 
     output = capsys.readouterr().out
     assert "[CRITICAL] Backup archive does not exist" in output
+
+
+def test_verify_backup_rejects_corrupt_archive(tmp_path, capsys):
+    archive = tmp_path / "broken.tar.gz"
+    archive.write_text("not an archive", encoding="utf-8")
+
+    assert main(["verify-backup", str(archive)]) == 1
+    assert "not readable" in capsys.readouterr().out

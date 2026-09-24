@@ -10,6 +10,9 @@ requires-python = ">=3.10"
 authors = [{name = "Chamindu Kaushalya"}]
 license = {text = "MIT"}
 
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
 [project.scripts]
 cloudops = "cloudops.cli:main"
 
