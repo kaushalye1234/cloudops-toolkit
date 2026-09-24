@@ -4,7 +4,7 @@
 
 A learning-focused command-line toolkit for repeatable Linux health checks, network diagnostics, Docker inspection, service checks, backup automation, local system reporting and pre-push quality scans.
 
-> **Project status:** early, usable milestone. Local Linux and Docker operations are implemented. AWS automation is planned and is not presented as completed.
+> **Project status:** usable local operations toolkit. AWS automation is planned and is not presented as completed.
 
 ## Why this project exists
 
@@ -87,7 +87,7 @@ GitHub Actions also generates a system report during CI and uploads it as an art
 
 ## Backups
 
-The `backup` command creates a compressed `.tar.gz` archive of a directory.
+The `backup` command creates a compressed `.tar.gz` archive of a directory from any working directory. Keep the destination outside the source so the archive cannot include itself. Existing archives are never overwritten.
 
 ```bash
 cloudops backup src backups
@@ -100,6 +100,23 @@ cloudops verify-backup backups/backup-file.tar.gz
 ```
 
 Backup verification matters because a backup is only useful if it can actually be opened and restored.
+
+## Five-minute demo
+
+On Linux or WSL, after installing the CLI, run this from a temporary directory:
+
+```bash
+mkdir -p /tmp/cloudops-demo/app
+printf 'service=ready\n' > /tmp/cloudops-demo/app/config.txt
+cd /tmp/cloudops-demo
+cloudops --json disk --path / --warning 101
+cloudops backup app backups
+cloudops verify-backup "$(find backups -name 'backup-*.tar.gz' -print -quit)"
+cloudops report --output-dir reports
+ls backups reports
+```
+
+The disk command prints structured status and usage data; backup creates an archive containing `app/config.txt`; verification reports `[OK]`; and report writes a timestamped text file. Docker and service results depend on the host. This demo uses `/tmp`, so it does not need a checkout after installation.
 
 ## Bash Automation
 
@@ -158,6 +175,7 @@ Every push and pull request runs:
 - [x] Automated tests and CI
 - [x] CLI tests for backup, services and reports
 - [x] GitHub Actions system report artifact
+- [x] Backup works after installation from an unrelated working directory
 - [ ] Backup retention policies
 - [ ] Structured application log analysis
 - [ ] Deployment helpers
