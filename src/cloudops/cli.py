@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import shutil
 import subprocess
 import sys
+import tarfile
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from cloudops.backup import create_backup
 from cloudops.checks import (
     CheckResult,
     disk_check,
@@ -63,12 +67,17 @@ def build_parser() -> argparse.ArgumentParser:
     report = commands.add_parser("report", help="Generate a local system report")
     report.add_argument("--output-dir", default="reports")
 
-    commands.add_parser("scan", help="Run local quality and test checks")
+    scan = commands.add_parser("scan", help="Run quality checks for a source checkout")
+    scan.add_argument(
+        "--project",
+        default=".",
+        help="Path to the project checkout (default: current directory)",
+    )
     commands.add_parser("doctor", help="Check local DevOps tool availability")
 
     logs = commands.add_parser("logs", help="Read recent Docker container logs")
     logs.add_argument("container")
-    logs.add_argument("--tail", type=int, default=50)
+    logs.add_argument("--tail", type=non_negative_int, default=50)
 
     return parser
 
@@ -84,20 +93,44 @@ def print_result(result: CheckResult, as_json: bool) -> None:
         print(f"  {key}: {json.dumps(value) if isinstance(value, (dict, list)) else value}")
 
 
-def check_services(names: list[str]) -> list[str]:
-    service_lines = []
+def non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be zero or greater")
+    return parsed
+
+
+def check_services(names: list[str]) -> list[CheckResult]:
+    if shutil.which("systemctl") is None:
+        return [
+            CheckResult("critical", f"{name}: systemctl is not installed", {"service": name})
+            for name in names
+        ]
+
+    results = []
 
     for name in names:
-        process = subprocess.run(
-            ["systemctl", "is-active", name],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        status = process.stdout.strip() or process.stderr.strip()
-        service_lines.append(f"{name}: {status}")
+        try:
+            process = subprocess.run(
+                ["systemctl", "is-active", name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            results.append(
+                CheckResult("critical", f"{name}: systemctl timed out", {"service": name})
+            )
+            continue
 
-    return service_lines
+        status = process.stdout.strip() or process.stderr.strip()
+        check_status = "ok" if process.returncode == 0 and status == "active" else "critical"
+        results.append(
+            CheckResult(check_status, f"{name}: {status or 'unknown'}", {"service": name})
+        )
+
+    return results
 
 
 def verify_backup_archive(archive: str) -> int:
@@ -111,35 +144,34 @@ def verify_backup_archive(archive: str) -> int:
         print(f"[CRITICAL] Backup archive is not a file: {archive}")
         return 1
 
-    process = subprocess.run(
-        ["tar", "-tzf", archive],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    if process.returncode == 0:
+    try:
+        with tarfile.open(archive_path, "r:gz") as backup:
+            backup.getmembers()
+    except (OSError, tarfile.TarError) as exc:
+        print(f"[CRITICAL] Backup archive is not readable: {archive}")
+        print(str(exc))
+        return 1
+    else:
         print(f"[OK] Backup archive is readable: {archive}")
         return 0
 
-    print(f"[CRITICAL] Backup archive is not readable: {archive}")
 
-    if process.stderr.strip():
-        print(process.stderr.strip())
+def run_scan(project: str) -> int:
+    project_path = Path(project).resolve()
+    if not (project_path / "pyproject.toml").is_file():
+        print(f"[CRITICAL] No pyproject.toml found in: {project_path}", file=sys.stderr)
+        return 1
 
-    return 1
-
-
-def run_scan() -> int:
     checks = [
-        ["ruff", "check", "src", "tests"],
-        ["pytest"],
+        [sys.executable, "-m", "ruff", "check", "src", "tests"],
+        [sys.executable, "-m", "pytest"],
     ]
     failed = False
 
     for command in checks:
-        print(f"Running: {' '.join(command)}")
-        process = subprocess.run(command, check=False)
+        display_command = " ".join(command[2:])
+        print(f"Running in {project_path}: {display_command}")
+        process = subprocess.run(command, cwd=project_path, check=False)
 
         if process.returncode != 0:
             failed = True
@@ -148,10 +180,18 @@ def run_scan() -> int:
 
 
 def run_doctor() -> int:
-    tools = ["python3", "git", "docker", "ruff", "pytest", "systemctl", "tar"]
     failed = False
 
-    for tool in tools:
+    print(f"[OK] python found at {sys.executable}")
+
+    for module in ["ruff", "pytest"]:
+        if importlib.util.find_spec(module) is not None:
+            print(f"[OK] {module} Python module is installed")
+        else:
+            print(f"[WARNING] {module} Python module is not installed")
+            failed = True
+
+    for tool in ["git", "docker", "systemctl", "tar", "shellcheck"]:
         path = shutil.which(tool)
 
         if path:
@@ -173,7 +213,7 @@ def write_report(output_dir: str) -> Path:
     health = system_health()
     disk = disk_check()
     docker = docker_check()
-    service_lines = check_services(["docker", "ssh"])
+    service_results = check_services(["docker", "ssh"])
 
     report_path.write_text(
         "\n".join(
@@ -191,7 +231,7 @@ def write_report(output_dir: str) -> Path:
                 f"- {docker.status.upper()}: {docker.message}",
                 "",
                 "Services",
-                *service_lines,
+                *(f"- {result.status.upper()}: {result.message}" for result in service_results),
                 "",
             ]
         ),
@@ -222,19 +262,25 @@ def main(argv: list[str] | None = None) -> int:
         result = docker_check()
 
     elif args.command == "backup":
-        process = subprocess.run(
-            ["bash", "scripts/backup.sh", args.source, args.destination],
-            check=False,
-        )
-        return process.returncode
+        try:
+            archive_path = create_backup(args.source, args.destination)
+        except (OSError, ValueError) as exc:
+            print(f"[CRITICAL] {exc}", file=sys.stderr)
+            return 1
+        print(f"Backup created: {archive_path}")
+        return 0
 
     elif args.command == "verify-backup":
         return verify_backup_archive(args.archive)
 
     elif args.command == "services":
-        for line in check_services(args.names):
-            print(line)
-        return 0
+        results = check_services(args.names)
+        if args.json:
+            print(json.dumps([asdict(result) for result in results], indent=2))
+        else:
+            for result in results:
+                print_result(result, False)
+        return 0 if all(result.status == "ok" for result in results) else 1
 
     elif args.command == "report":
         report_path = write_report(args.output_dir)
@@ -242,16 +288,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     elif args.command == "scan":
-        return run_scan()
+        return run_scan(args.project)
 
     elif args.command == "doctor":
         return run_doctor()
 
     elif args.command == "logs":
-        process = subprocess.run(
-            ["docker", "logs", "--tail", str(args.tail), args.container],
-            check=False,
-        )
+        if shutil.which("docker") is None:
+            print("[CRITICAL] Docker CLI is not installed", file=sys.stderr)
+            return 1
+        try:
+            process = subprocess.run(
+                ["docker", "logs", "--tail", str(args.tail), args.container],
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            print("[CRITICAL] Docker did not respond within 10 seconds", file=sys.stderr)
+            return 1
         return process.returncode
 
     else:

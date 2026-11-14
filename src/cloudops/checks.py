@@ -59,17 +59,28 @@ def docker_check() -> CheckResult:
     if shutil.which("docker") is None:
         return CheckResult("critical", "Docker CLI is not installed", {})
 
-    result = subprocess.run(
-        ["docker", "ps", "--format", "{{json .}}"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{json .}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return CheckResult("critical", "Docker did not respond within 10 seconds", {})
+
     if result.returncode != 0:
         return CheckResult("critical", "Docker daemon is unavailable", {"error": result.stderr.strip()})
 
-    containers = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    try:
+        containers = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    except json.JSONDecodeError as exc:
+        return CheckResult(
+            "critical",
+            "Docker returned an unexpected response",
+            {"error": str(exc)},
+        )
     return CheckResult(
         "ok",
         f"Docker is available; {len(containers)} running container(s)",
