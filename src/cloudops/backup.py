@@ -32,7 +32,7 @@ def create_backup(source: str, destination: str) -> Path:
             temporary_path = Path(temporary.name)
         with tarfile.open(temporary_path, "w:gz") as archive:
             archive.add(source_path, arcname=source_path.name)
-        os.replace(temporary_path, archive_path)
+        os.link(temporary_path, archive_path)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
