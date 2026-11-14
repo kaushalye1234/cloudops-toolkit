@@ -1,0 +1,104 @@
+name: Publish CloudOps Toolkit v0.2.0
+
+# A one-time release workflow. It can also be re-run manually.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-v0.2.0.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged release source
+        uses: actions/checkout@v4
+        with:
+          ref: v0.2.0
+          fetch-depth: 0
+
+      - name: Verify the immutable release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=a891881e94ef8253943a9cba8938b1be3a22d77e
+          test "$(git rev-parse HEAD)" = "$expected"
+          test "$(git rev-parse 'v0.2.0^{commit}')" = "$expected"
+          grep -Fx 'version = "0.2.0"' pyproject.toml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test and build the tagged source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" build twine
+          python -m pytest -q
+          python -m ruff check src tests
+          shellcheck scripts/*.sh
+          bash scripts/verify-installed.sh
+          python -m build --outdir dist
+          python -m twine check --strict dist/*
+
+      - name: Smoke-test the wheel outside the checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_venv="$(mktemp -d)"
+          python -m venv "$smoke_venv"
+          "$smoke_venv/bin/python" -m pip install dist/*.whl
+          (cd /tmp && "$smoke_venv/bin/cloudops" --help >/dev/null)
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum *.whl *.tar.gz > SHA256SUMS.txt)
+
+      - name: Publish GitHub Release with verified artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.2.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v0.2.0 already exists; no duplicate publication."
+            exit 0
+          fi
+          cat > /tmp/cloudops-v0.2.0-notes.md <<'EOF'
+          # CloudOps Toolkit v0.2.0
+
+          Tested portfolio milestone for a Python/Bash CLI for Linux and Docker operations.
+
+          ## Features
+          - Linux health, disk, TCP port and service diagnostics
+          - Docker container inspection and log retrieval
+          - JSON-friendly diagnostics, automation-friendly exit codes and system reports
+          - Compressed directory backups, archive verification and no-overwrite publication
+          - Installed-package and disposable Docker demonstrations
+
+          ## Verification
+          - 23 automated Python tests
+          - Ruff and ShellCheck
+          - GitHub Actions CI, including Docker
+          - Backup creation and restore comparison
+          - Wheel and source distribution validated using Twine strict mode
+          - Fresh-environment wheel smoke test
+
+          ## Requirements
+          - Python 3.11 or newer
+          - Linux or WSL recommended
+          - Docker for container-specific commands
+          - A filesystem supporting hard links for backup publication
+
+          ## Planned, not included
+          Backup retention, structured log analysis, deployment helpers, cloud monitoring, and Prometheus metrics.
+          EOF
+          gh release create v0.2.0             dist/*.whl dist/*.tar.gz dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --title "CloudOps Toolkit v0.2.0"             --notes-file /tmp/cloudops-v0.2.0-notes.md             --verify-tag
