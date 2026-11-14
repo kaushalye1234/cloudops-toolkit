@@ -21,7 +21,7 @@ For a reviewer, the main engineering evidence is:
 
 ## Quick start
 
-Linux or WSL with Python 3.10 or newer is the primary environment.
+Linux or WSL with Python 3.11 or newer is the primary environment.
 
 ```bash
 git clone https://github.com/kaushalye1234/cloudops-toolkit.git
@@ -162,7 +162,7 @@ GitHub Actions runs Python tests and Ruff, verifies a fresh installed package ou
 
 - Docker cleanup is review-only; `scripts/docker-cleanup.sh` never deletes resources.
 - Backup destinations inside the source are rejected to prevent self-inclusion.
-- Backup files are written through a temporary file and moved into place only after creation.
+- Completed backup archives are published using a hard link to avoid overwriting an existing archive; this requires a filesystem that supports hard links.
 - Existing timestamped backup archives are not overwritten.
 - The Docker demo uses a unique container name, a random loopback port, and cleanup on exit.
 - Credentials, `.env` files, generated reports, and local backups should not be committed.
